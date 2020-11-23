@@ -1,4 +1,4 @@
-import sys, subprocess
+import sys, subprocess, os
 from nmigen import Elaboratable, Module, Signal, Memory, ClockSignal, Instance, ResetSignal
 import numpy as np
 
@@ -16,6 +16,9 @@ class PicoRV32(Elaboratable):
     def elaborate(self, platform):
         if platform is not None:
             platform.add_file("picorv32.v", open("picorv32.v", "r"))
+
+        if not os.path.exists("build"):
+            os.makedirs("build")
 
         subprocess.run(
             ["cargo", "objcopy", "--release", "--", "-O", "binary", "../build/app.bin"],
