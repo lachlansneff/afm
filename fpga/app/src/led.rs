@@ -12,6 +12,8 @@ pub struct Led {
     mapping: *mut u32,
 }
 
+unsafe impl Sync for Led {}
+
 impl Led {
     pub const fn new() -> Self {
         Self {
@@ -19,7 +21,7 @@ impl Led {
         }
     }
 
-    pub fn enable(&mut self, en: bool) {
+    pub fn enable(&self, en: bool) {
         let flags = if en { Flags::ENABLE } else { Flags::empty() };
         unsafe {
             self.mapping.write_volatile(flags.bits());

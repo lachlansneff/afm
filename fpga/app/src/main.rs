@@ -11,12 +11,12 @@ use led::Led;
 
 use picorv32_rt::entry;
 
-const LED: Led = Led::new();
+static LED: Led = Led::new();
 static NCO: Nco = Nco::new();
 
 #[entry]
 fn main() -> ! {
-    NCO.set_frequency(32_768.5);
+    NCO.set_frequency(32_768.);
     NCO.enable(true);
 
     LED.enable(true);

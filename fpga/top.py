@@ -1,4 +1,6 @@
-from nmigen import Module, Elaboratable, DomainRenamer, Signal, Record
+from os import wait
+from uart import UART
+from nmigen import Module, Elaboratable, DomainRenamer, Signal, Record, Cat
 from nmigen.build.dsl import Resource, Pins
 
 import typing
@@ -21,14 +23,24 @@ class Top(Elaboratable):
         # self.nco = DomainRenamer("pll")(NCO(width=12, samples=1024))
         # self.dac = DomainRenamer("pll")(SigmaDeltaDAC(width=12))
         self.nco = NCO(width=12, samples=1024)
-        self.dac = SigmaDeltaDAC(width=12)
+        self.sine_dac = SigmaDeltaDAC(width=12)
+        self.cosine_dac = SigmaDeltaDAC(width=12)
+        self.uart = UART(clk_freq=16e6, baud_rate=9600)
         # self.blinky = Blinky()
 
         self.nco_ctrl = Record([
             ("enable", 1),
         ])
 
+        self.uart_data = Signal(8)
         self.led = Signal()
+
+        def uart_write(m: Module, mem_wdata: Signal):
+            m.d.comb += self.uart_data.eq(mem_wdata)
+            m.d.sync += [
+                self.uart.tx_rdy.eq(1),
+                self.uart
+            ]
 
         self.picorv32 = PicoRV32([
             Mapping(
@@ -37,6 +49,7 @@ class Top(Elaboratable):
                 write=True,
                 read=False,
             ),
+            # NCO
             Mapping(
                 addr=0xf000_0000,
                 signal=self.nco_ctrl,
@@ -49,23 +62,34 @@ class Top(Elaboratable):
                 read=True,
                 write=True,
             ),
+            # UART
+            Mapping(
+                addr=0xf000_0008, # offset by 1 word,
+                # signal=self.uart_data,
+                read=False,
+                write=uart_write,
+            )
         ])
 
     def elaborate(self, platform):
         m = Module()
 
-        m.submodules += [self.nco, self.dac, self.picorv32]
+        m.submodules += [self.sine_dac, self.cosine_dac]
+        m.submodules += [self.nco, self.picorv32, self.uart]
 
         m.d.comb += [
             # self.dds.phase_step.eq(DDS.calculate_phase_step(clk_frequency=50e6, frequency=32_768)),
-            self.dac.waveform.eq(self.nco.sin),
+            self.sine_dac.waveform.eq(self.nco.sin),
+            self.cosine_dac.waveform.eq(self.nco.cos),
             self.nco.enable.eq(self.nco_ctrl.enable),
         ]
 
+        m.d.sync += self.uart.tx_rdy.eq(0)
+
         if platform is not None:
-            platform.add_resources([Resource("dac", 0, Pins("13", dir="o", conn=("gpio", 0)))])
-            dac_pin = platform.request("dac")
-            m.d.comb += dac_pin.o.eq(self.dac.out)
+            platform.add_resources([Resource("dac", 0, Pins("12 13", dir="o", conn=("gpio", 0)))])
+            dac_pins = platform.request("dac")
+            m.d.comb += dac_pins.o.eq(Cat(self.sine_dac.out, self.cosine_dac.out))
 
             led_pin = platform.request("led")
             m.d.comb += led_pin.o.eq(self.led)

@@ -16,7 +16,7 @@ module test;
     initial begin
         $dumpfile("top.vcd");
         $dumpvars(0,test);
-        repeat (100000) @(posedge clk);
+        repeat (1000000) @(posedge clk);
         $finish;
     end
 

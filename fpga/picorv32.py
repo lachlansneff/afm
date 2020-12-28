@@ -1,13 +1,15 @@
 import sys, subprocess, os
+from typing import Callable, Union
 from nmigen import Elaboratable, Module, Signal, Memory, ClockSignal, Instance, ResetSignal
 import numpy as np
 
 class Mapping:
-    def __init__(self, addr: int, signal: Signal, read: bool, write: bool):
+    def __init__(self, addr: int, signal: Signal, read: bool, write: Union[None, bool, Callable[[Module, Signal], None]]):
         self.addr = addr
         self.signal = signal
         self.read = read
-        self.write = write
+        self.writing_enabled = (isinstance(write, bool) and write) or callable(write)
+        self.write = staticmethod(write) if callable(write) else None
 
 class PicoRV32(Elaboratable):
     def __init__(self, memory_mappings: list[Mapping]):
@@ -94,12 +96,15 @@ class PicoRV32(Elaboratable):
                 m.d.sync += mem_ready.eq(1)
 
             for mapping in self.memory_mappings:
-                if mapping.write:
+                if mapping.writing_enabled:
                     with m.If(mem_wstrb.bool() & (mem_addr == mapping.addr)):
-                        m.d.sync += [
-                            mapping.signal.eq(mem_wdata),
-                            mem_ready.eq(1),
-                        ]
+                        if mapping.write is not None:
+                            mapping.write(m, mem_wdata)
+                        else:
+                            m.d.sync += [
+                                mapping.signal.eq(mem_wdata),
+                                mem_ready.eq(1),
+                            ]
                 if mapping.read:
                     with m.If((~mem_wstrb).bool() & (mem_addr == mapping.addr)):
                         m.d.comb += mem_rdata.eq(mapping.signal)
