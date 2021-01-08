@@ -109,7 +109,8 @@ class PicoRV32(Elaboratable):
                     with m.If((~mem_wstrb).bool() & (mem_addr == mapping.addr)):
                         m.d.comb += mem_rdata.eq(mapping.signal)
                         m.d.sync += mem_ready.eq(1)
-                if not mapping.read and not mapping.write:
+                if not mapping.read and not (mapping.write or mapping.writing_enabled):
+                    print(mapping.addr)
                     print("mapping doesn't specify read or write", file=sys.stderr)
 
         return m
